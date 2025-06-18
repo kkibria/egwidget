@@ -1,0 +1,28 @@
+# MyCard.toml
+
+# 1. Define the “function signature” of this widget:
+[[interface]]
+name = "title"
+type = "string"
+default = "Card Title"
+
+[[interface]]
+name = "body"
+type = "string"
+default = "Some descriptive text…"
+
+# 2. Under the hood it's just a Frame + Labels
+widget_type = "Frame"
+id = "MyCard"
+
+[properties.inner_margin]
+left = 8.0
+right = 8.0
+top = 8.0
+bottom = 8.0
+
+children = [
+  { widget_type = "Label", properties = { text = "${title}" } },
+  { widget_type = "Separator" },
+  { widget_type = "Label", properties = { text = "${body}" } },
+]
