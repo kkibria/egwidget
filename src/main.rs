@@ -1,4 +1,4 @@
-// --- main.rs
+// --- main copy.rs
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
@@ -124,7 +124,7 @@ fn load_and_prepare(
             let txt = match std::fs::read_to_string(entry.path()) {
                 Ok(s) => s,
                 Err(e) => {
-                    println!("[DEBUG] Read error {:?}", e);
+                    println!("[DEBUG] Read error: {:?}", e);
                     continue;
                 }
             };
@@ -135,23 +135,35 @@ fn load_and_prepare(
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
 
-            // Try template first
+            // Try parsing as template
             if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
-                println!("[DEBUG] Registered template: {}", stem);
-                let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
-                let base = WidgetDef {
-                    widget_type: tpl.widget_type,
-                    id: tpl.id,
-                    properties: tpl.properties,
-                    children: tpl.children,
-                };
-                templates.insert(stem.to_string(), (base, params));
-            } else if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
+                if !tpl.interface.is_empty() {
+                    println!("[DEBUG] Registered template: {}", stem);
+                    let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
+                    templates.insert(
+                        stem.to_string(),
+                        (
+                            WidgetDef {
+                                widget_type: tpl.widget_type,
+                                id: tpl.id,
+                                properties: tpl.properties,
+                                children: tpl.children,
+                            },
+                            params,
+                        ),
+                    );
+                    continue; // skip root parsing
+                }
+            }
+            // Else try as root definition
+            if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
                 println!(
                     "[DEBUG] Registered root: {} (id={:?})",
                     def.widget_type, def.id
                 );
                 roots.push(def);
+            } else {
+                println!("[DEBUG] Failed to parse {} as template or root", stem);
             }
         }
     }
@@ -160,36 +172,44 @@ fn load_and_prepare(
     println!("[DEBUG] Total roots: {}", roots.len());
 
     for def in roots.iter_mut() {
-        expand_templates(def, templates);
+        expand_templates(def, &templates);
     }
 }
 
 fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef, Vec<String>)>) {
-    if let Some((tpl, allowed)) = templates.get(&def.widget_type) {
+    if let Some((base, allowed)) = templates.get(&def.widget_type) {
+        // shallow‐clone the base widget
+        let mut merged = base.clone();
+
+        // filter instance properties by allowed
         let props = std::mem::take(&mut def.properties);
-        let filtered: toml::value::Table = props
-            .into_iter()
-            .filter(|(k, _)| allowed.contains(k))
-            .collect();
-        let mut expanded = tpl.clone();
-        for (k, v) in filtered {
-            expanded.properties.insert(k, v);
+        for (k, v) in props.into_iter().filter(|(k, _)| allowed.contains(k)) {
+            merged.properties.insert(k, v);
         }
-        expanded.children.extend(def.children.drain(..));
-        *def = expanded;
+
+        // merge children
+        let extra = std::mem::take(&mut def.children);
+        merged.children.extend(extra);
+
+        // replace
+        *def = merged;
     }
-    for child in def.children.iter_mut() {
+
+    // recurse
+    for child in &mut def.children {
         expand_templates(child, templates);
     }
 }
 
 fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
     let label = def.id.as_deref().unwrap_or(&def.widget_type);
-    egui::CollapsingHeader::new(label).show(ui, |ui| {
-        for child in &def.children {
-            show_tree(ui, child);
-        }
-    });
+    egui::CollapsingHeader::new(label)
+        .default_open(true)
+        .show(ui, |ui| {
+            for child in &def.children {
+                show_tree(ui, child);
+            }
+        });
 }
 
 fn render_preview(ui: &mut egui::Ui, def: &WidgetDef) {

@@ -1,28 +1,22 @@
 # MyCard.toml
 
-# 1. Define the “function signature” of this widget:
-[[interface]]
-name = "title"
-type = "string"
-default = "Card Title"
+[template]
+name       = "MyCard"
+parameters = ["title", "body"]
 
-[[interface]]
-name = "body"
-type = "string"
-default = "Some descriptive text…"
-
-# 2. Under the hood it's just a Frame + Labels
 widget_type = "Frame"
-id = "MyCard"
+id          = "MyCard"
 
 [properties.inner_margin]
-left = 8.0
-right = 8.0
-top = 8.0
+left   = 8.0
+right  = 8.0
+top    = 8.0
 bottom = 8.0
 
+# Here we use a shorthand for children: a list of
+# TOML tables with either `text` or no extra props.
 children = [
-  { widget_type = "Label", properties = { text = "${title}" } },
-  { widget_type = "Separator" },
-  { widget_type = "Label", properties = { text = "${body}" } },
+  { widget = "Label", text = "${title}" },
+  { widget = "Separator"          },
+  { widget = "Label", text = "${body}"  },
 ]
