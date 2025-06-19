@@ -42,42 +42,104 @@ struct WidgetDef {
     children: Vec<WidgetDef>,
 }
 
-#[derive(Default)]
 struct TomlUiApp {
-    watch_dir: Option<PathBuf>,
+    watch_path: Option<PathBuf>,
+    watcher: Option<RecommendedWatcher>,
+    watch_rx: Option<Receiver<Event>>,
     reload_rx: Option<Receiver<Event>>,
     templates: HashMap<String, (WidgetDef, Vec<String>)>,
     roots: Vec<WidgetDef>,
 }
 
+impl TomlUiApp {
+    pub fn new() -> Self {
+        Self {
+            templates: HashMap::new(),
+            roots: Vec::new(),
+            watch_path: None,
+            watcher: None,
+            watch_rx: None,
+            reload_rx: None,
+        }
+    }
+
+    /// Call when the user picks a folder.
+    fn set_watch_path(&mut self, path: PathBuf) {
+        // remember the path
+        self.watch_path = Some(path.clone());
+
+        // channel for file events
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        // create the watcher once
+        let mut w = RecommendedWatcher::new(
+            move |res| {
+                if let Ok(evt) = res {
+                    let _ = tx.send(evt);
+                }
+            },
+            notify::Config::default(),
+        )
+        .expect("failed to init watcher");
+
+        w.watch(&path, RecursiveMode::Recursive)
+            .expect("failed to watch folder");
+
+        self.watcher = Some(w);
+        self.watch_rx = Some(rx);
+
+        // initial load
+        load_and_prepare(&path, &mut self.templates, &mut self.roots);
+    }
+}
+
 impl App for TomlUiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Toolbar
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            if ui.button("Select TOML Folder").clicked() {
-                if let Some(dir) = FileDialog::new().pick_folder() {
-                    self.watch_dir = Some(dir.clone());
-                    let (tx, rx) = channel::<Event>();
-                    let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
-                        move |res| {
-                            if let Ok(event) = res {
-                                let _ = tx.send(event);
-                            }
-                        },
-                        Config::default(),
-                    )
-                    .unwrap();
-                    watcher.watch(&dir, RecursiveMode::Recursive).unwrap();
-                    self.reload_rx = Some(rx);
-                    load_and_prepare(&dir, &mut self.templates, &mut self.roots);
-                }
-            }
-        });
+        // egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+
+        //     if ui.button("Select TOML Folder").clicked() {
+        //         if let Some(dir) = FileDialog::new().pick_folder() {
+        //             self.watch_path = Some(dir.clone());
+        //             let (tx, rx) = channel::<Event>();
+        //             let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
+        //                 move |res| {
+        //                     if let Ok(event) = res {
+        //                         let _ = tx.send(event);
+        //                     }
+        //                 },
+        //                 Config::default(),
+        //             )
+        //             .unwrap();
+        //             watcher.watch(&dir, RecursiveMode::Recursive).unwrap();
+        //             self.reload_rx = Some(rx);
+        //             load_and_prepare(&dir, &mut self.templates, &mut self.roots);
+        //         }
+        //     }
+        // });
+
+        if self.watch_path.is_none() {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("No TOML folder selected");
+                    if ui.button("Select folder…").clicked() {
+                        // Using `rfd` crate for a native folder dialog:
+                        if let Some(folder) = rfd::FileDialog::new()
+                            .set_title("Choose your TOML folder")
+                            .pick_folder()
+                        {
+                            self.set_watch_path(folder);
+                        }
+                    }
+                });
+            });
+            return; // skip the rest until a folder is chosen
+        }
 
         // File events
         if let Some(rx) = &self.reload_rx {
             if let Ok(event) = rx.try_recv() {
-                if let Some(dir) = &self.watch_dir {
+                if let Some(dir) = &self.watch_path {
                     if matches!(event.kind, EventKind::Modify(_)) {
                         load_and_prepare(dir, &mut self.templates, &mut self.roots);
                         ctx.request_repaint();
@@ -254,7 +316,7 @@ fn render_preview(ui: &mut egui::Ui, def: &WidgetDef) {
 }
 
 fn main() {
-    let app = TomlUiApp::default();
+    let app = TomlUiApp::new();
     let native_options = eframe::NativeOptions::default();
 
     let _ = eframe::run_native(
