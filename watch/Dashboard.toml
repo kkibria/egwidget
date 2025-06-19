@@ -1,7 +1,0 @@
-widget_type = "Vertical"
-id = "Dashboard"
-
-children = [
-  { widget_type = "MyCard", properties = { title = "Welcome!", body = "This is your dashboard." } },
-  { widget_type = "MyCard", properties = { title = "Status",  body = "All systems operational." } },
-]

@@ -1,0 +1,61 @@
+// src/wui.pest
+
+// Skip whitespace and line comments
+WHITESPACE        = _{ " " | "\t" | "\r" | "\n" }
+COMMENT           = _{ "//" ~ (!"\n" ~ ANY)* }
+
+// Basic tokens
+ident             = @{ ASCII_ALPHANUMERIC+ }
+string            = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+number            = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+boolean           = { "true" | "false" }
+
+// Script blocks in double‐mustache
+script_block      = @{ "{{" ~ (!"}}" ~ ANY)* ~ "}}" }
+
+// Literals for args
+literal           = _{ string | number | boolean }
+
+// A top‐level file is just a sequence of statements
+file              = { SOI ~ statement* ~ EOI }
+
+// Any of these can appear at top‐level or inside widget bodies
+statement         = _{
+    param_decl
+  | breakpoints_decl
+  | effect_decl
+  | if_decl
+  | for_decl
+  | widget_decl
+}
+
+// --- Declarations ---
+
+// Reactive parameter (optional default)
+param_decl        = { "param" ~ ident ~ ("=" ~ literal)? ~ ";" }
+
+// Named breakpoints block
+breakpoints_decl  = { "Breakpoints" ~ "{" ~ bp_decl* ~ "}" }
+bp_decl           = { ident ~ "=" ~ number ~ ";" }
+
+// Effect block with on_change handlers
+effect_decl       = { "Effect" ~ "{" ~ on_change_decl* ~ "}" }
+on_change_decl    = { "on_change" ~ "(" ~ ident ~ ")" ~ script_block }
+
+// Conditional inclusion
+if_decl           = { "If" ~ "(" ~ ident ~ ")" ~ "{" ~ statement* ~ "}" }
+
+// Loop over a reactive array
+for_decl          = { "For" ~ "(" ~ ident ~ "in" ~ ident ~ ")" ~ "{" ~ statement* ~ "}" }
+
+// --- Widget invocation ---
+
+// A widget call with optional args and optional nested body
+widget_decl       = { ident 
+                    ~ ("(" ~ arg_list? ~ ")") 
+                    ~ ("{" ~ statement* ~ "}")? 
+                    ~ ";" }
+
+// Argument list inside parentheses
+arg_list          = { arg ~ ("," ~ arg)* }
+arg               = { ident ~ "=" ~ (literal | script_block) }

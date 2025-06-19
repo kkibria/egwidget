@@ -1,4 +1,5 @@
 // --- main copy.rs
+mod parser;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
@@ -10,6 +11,7 @@ use std::collections::HashMap;
 use walkdir::WalkDir;
 
 use notify::{Error, PollWatcher};
+use parser::{parse_template, print_parse_error};
 use std::time::Duration;
 
 #[allow(dead_code)]
@@ -234,6 +236,73 @@ impl App for TomlUiApp {
     }
 }
 
+// fn load_and_prepare(
+//     dir: &PathBuf,
+//     templates: &mut HashMap<String, (WidgetDef, Vec<String>)>,
+//     roots: &mut Vec<WidgetDef>,
+// ) {
+//     println!("[DEBUG] Scanning directory: {:?}", dir);
+//     templates.clear();
+//     roots.clear();
+
+//     for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
+//         if entry.path().extension().and_then(|s| s.to_str()) == Some("toml") {
+//             println!("[DEBUG] Found TOML file: {:?}", entry.path());
+//             let txt = match std::fs::read_to_string(entry.path()) {
+//                 Ok(s) => s,
+//                 Err(e) => {
+//                     println!("[DEBUG] Read error: {:?}", e);
+//                     continue;
+//                 }
+//             };
+
+//             let stem = entry
+//                 .path()
+//                 .file_stem()
+//                 .and_then(|s| s.to_str())
+//                 .unwrap_or("");
+
+//             // Try parsing as template
+//             if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
+//                 if !tpl.interface.is_empty() {
+//                     println!("[DEBUG] Registered template: {}", stem);
+//                     let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
+//                     templates.insert(
+//                         stem.to_string(),
+//                         (
+//                             WidgetDef {
+//                                 widget_type: tpl.widget_type,
+//                                 id: tpl.id,
+//                                 properties: tpl.properties,
+//                                 children: tpl.children,
+//                             },
+//                             params,
+//                         ),
+//                     );
+//                     continue; // skip root parsing
+//                 }
+//             }
+//             // Else try as root definition
+//             if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
+//                 println!(
+//                     "[DEBUG] Registered root: {} (id={:?})",
+//                     def.widget_type, def.id
+//                 );
+//                 roots.push(def);
+//             } else {
+//                 println!("[DEBUG] Failed to parse {} as template or root", stem);
+//             }
+//         }
+//     }
+
+//     println!("[DEBUG] Total templates: {}", templates.len());
+//     println!("[DEBUG] Total roots: {}", roots.len());
+
+//     for def in roots.iter_mut() {
+//         expand_templates(def, &templates);
+//     }
+// }
+
 fn load_and_prepare(
     dir: &PathBuf,
     templates: &mut HashMap<String, (WidgetDef, Vec<String>)>,
@@ -243,62 +312,120 @@ fn load_and_prepare(
     templates.clear();
     roots.clear();
 
-    for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
-        if entry.path().extension().and_then(|s| s.to_str()) == Some("toml") {
-            println!("[DEBUG] Found TOML file: {:?}", entry.path());
-            let txt = match std::fs::read_to_string(entry.path()) {
-                Ok(s) => s,
-                Err(e) => {
-                    println!("[DEBUG] Read error: {:?}", e);
-                    continue;
-                }
-            };
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("wui") {
+            continue;
+        }
+        let stem = path.file_stem().unwrap().to_string_lossy().to_string();
+        let text = std::fs::read_to_string(&path).unwrap();
 
-            let stem = entry
-                .path()
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-
-            // Try parsing as template
-            if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
-                if !tpl.interface.is_empty() {
-                    println!("[DEBUG] Registered template: {}", stem);
-                    let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
-                    templates.insert(
-                        stem.to_string(),
-                        (
-                            WidgetDef {
-                                widget_type: tpl.widget_type,
-                                id: tpl.id,
-                                properties: tpl.properties,
-                                children: tpl.children,
-                            },
-                            params,
-                        ),
-                    );
-                    continue; // skip root parsing
-                }
+        // Try to parse as a template
+        match parse_template(&text, &stem) {
+            Ok(tpl) => {
+                println!("[DEBUG] Registered template: {}", tpl.name);
+                // templates.insert(tpl.name.clone(), tpl);
             }
-            // Else try as root definition
-            if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
-                println!(
-                    "[DEBUG] Registered root: {} (id={:?})",
-                    def.widget_type, def.id
-                );
-                roots.push(def);
-            } else {
-                println!("[DEBUG] Failed to parse {} as template or root", stem);
+            Err(err) => {
+                print_parse_error(&text, err, &format!("{}.wui", stem));
+                // skip this file
+                continue;
             }
         }
+
+
+
+
+        // match parser::parse_template(&text, &stem) {
+        //     Ok(tpl) => {
+        //         println!("[DEBUG] Registered template: {}", tpl.name);
+        //         // templates.insert(tpl.name.clone(), tpl);
+        //     }
+
+        //     Err(err) => {
+        //         eprintln!(
+        //             "[ERROR] Failed to parse {}.wui (skipping): {}",
+        //             stem,
+        //             err // this calls Display on the pest::Error
+        //         );
+        //         continue;
+        //     } //     Err(err) => {
+              //         eprintln!(
+              //             "[ERROR] Failed to parse {}.wui (skipping):\n  {} at line {}, col {}",
+              //             stem,
+              //             err.variant.message(), // use .to_string() if no message() method
+              //             err.line_col.unwrap_or((0, 0)).0,
+              //             err.line_col.unwrap_or((0, 0)).1,
+              //         );
+              //         // Skip this file instead of panic!
+              //         continue;
+              //     }
+        // }
     }
 
-    println!("[DEBUG] Total templates: {}", templates.len());
-    println!("[DEBUG] Total roots: {}", roots.len());
+    // for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
+    //     if entry.path().extension().and_then(|s| s.to_str()) == Some("wui") {
+    //         println!("[DEBUG] Found wui file: {:?}", entry.path());
+    //         let txt = match std::fs::read_to_string(entry.path()) {
+    //             Ok(s) => s,
+    //             Err(e) => {
+    //                 println!("[DEBUG] Read error: {:?}", e);
+    //                 continue;
+    //             }
+    //         };
 
-    for def in roots.iter_mut() {
-        expand_templates(def, &templates);
-    }
+    //         let stem = entry
+    //             .path()
+    //             .file_stem()
+    //             .and_then(|s| s.to_str())
+    //             .unwrap_or("");
+
+    //         if stem == "main" {
+    //             let tpl = parse_template(&txt, &stem).expect("failed to parse main.wui");
+    //             println!("Parsed main template: {:#?}", tpl);
+    //             // templates.insert(tpl.name.clone(), tpl);
+    //         }
+
+    // // Try parsing as template
+    // if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
+    //     if !tpl.interface.is_empty() {
+    //         println!("[DEBUG] Registered template: {}", stem);
+    //         let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
+    //         templates.insert(
+    //             stem.to_string(),
+    //             (
+    //                 WidgetDef {
+    //                     widget_type: tpl.widget_type,
+    //                     id: tpl.id,
+    //                     properties: tpl.properties,
+    //                     children: tpl.children,
+    //                 },
+    //                 params,
+    //             ),
+    //         );
+    //         continue; // skip root parsing
+    //     }
+    // }
+    // Else try as root definition
+
+    // if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
+    //     println!(
+    //         "[DEBUG] Registered root: {} (id={:?})",
+    //         def.widget_type, def.id
+    //     );
+    //     roots.push(def);
+    // } else {
+    //     println!("[DEBUG] Failed to parse {} as template or root", stem);
+    // }
+    //     }
+    // }
+
+    // println!("[DEBUG] Total templates: {}", templates.len());
+    // println!("[DEBUG] Total roots: {}", roots.len());
+
+    // for def in roots.iter_mut() {
+    //     expand_templates(def, &templates);
+    // }
 }
 
 fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef, Vec<String>)>) {
@@ -433,7 +560,7 @@ fn main() {
     let native_options = eframe::NativeOptions::default();
 
     let _ = eframe::run_native(
-        "TOML egui Builder",
+        "wui egui Builder",
         native_options,
         Box::new(|_cc| Ok(Box::new(app))),
     );

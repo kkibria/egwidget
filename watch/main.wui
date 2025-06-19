@@ -1,0 +1,6 @@
+
+// test.wui
+param title;
+Frame() {
+  Label(text = {{ title }} );
+};
