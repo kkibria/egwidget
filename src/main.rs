@@ -1,4 +1,3 @@
-// --- main copy.rs
 mod parser;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
@@ -8,7 +7,6 @@ use notify::{Config, Event, EventKind, RecursiveMode, Watcher};
 use rfd::FileDialog;
 use serde::Deserialize;
 use std::collections::HashMap;
-use walkdir::WalkDir;
 
 use notify::{Error, PollWatcher};
 use parser::{parse_template, print_parse_error};
@@ -23,6 +21,7 @@ struct InterfaceParam {
     default: Option<toml::Value>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct TemplateDef {
     #[serde(default)]
@@ -69,35 +68,12 @@ impl TomlUiApp {
     }
 
     /// Call when the user picks a folder.
-    ///
-    ///
-    ///
-    ///
-
     fn set_watch_path<F>(&mut self, path: PathBuf, mut on_event: F)
     where
         F: FnMut() + Send + 'static,
     {
-        // fn set_watch_path(&mut self, path: PathBuf) {
         // remember the path
         self.watch_path = Some(path.clone());
-
-        // channel for file events
-
-        // create the watcher once
-        // let mut w = RecommendedWatcher::new(
-        //     move |res| {
-        //         if let Ok(evt) = res {
-        //             let _ = tx.send(evt);
-        //         }
-        //     },
-        //     notify::Config::default(),
-        // )
-        // .expect("failed to init watcher");
-
-        // w.watch(&path, RecursiveMode::Recursive)
-        //     .expect("failed to watch folder");
-
         let (tx, rx) = channel();
 
         // Poll every 500ms (tweak as you like)
@@ -128,31 +104,9 @@ impl TomlUiApp {
 
 impl App for TomlUiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Toolbar
-        // egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-
-        //     if ui.button("Select TOML Folder").clicked() {
-        //         if let Some(dir) = FileDialog::new().pick_folder() {
-        //             self.watch_path = Some(dir.clone());
-        //             let (tx, rx) = channel::<Event>();
-        //             let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
-        //                 move |res| {
-        //                     if let Ok(event) = res {
-        //                         let _ = tx.send(event);
-        //                     }
-        //                 },
-        //                 Config::default(),
-        //             )
-        //             .unwrap();
-        //             watcher.watch(&dir, RecursiveMode::Recursive).unwrap();
-        //             self.reload_rx = Some(rx);
-        //             load_and_prepare(&dir, &mut self.templates, &mut self.roots);
-        //         }
-        //     }
-        // });
-
         if self.watch_path.is_none() {
             egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Widget Trees");
                 ui.vertical_centered(|ui| {
                     ui.heading("No TOML folder selected");
                     if ui.button("Select folder…").clicked() {
@@ -213,19 +167,7 @@ impl App for TomlUiApp {
             }
         });
 
-        // Tree view
-        // egui::SidePanel::left("tree_panel").show(ctx, |ui| {
-        //     ui.heading("Widget Trees");
-        //     for (i, def) in self.roots.iter().enumerate() {
-        //         let label = def.id.clone().unwrap_or_else(|| format!("Root {}", i));
-        //         egui::CollapsingHeader::new(label)
-        //             .default_open(true)
-        //             .show(ui, |ui| {
-        //                 show_tree(ui, def);
-        //             });
-        //     }
-        // });
-
+    
         // Preview
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Preview");
@@ -236,72 +178,6 @@ impl App for TomlUiApp {
     }
 }
 
-// fn load_and_prepare(
-//     dir: &PathBuf,
-//     templates: &mut HashMap<String, (WidgetDef, Vec<String>)>,
-//     roots: &mut Vec<WidgetDef>,
-// ) {
-//     println!("[DEBUG] Scanning directory: {:?}", dir);
-//     templates.clear();
-//     roots.clear();
-
-//     for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
-//         if entry.path().extension().and_then(|s| s.to_str()) == Some("toml") {
-//             println!("[DEBUG] Found TOML file: {:?}", entry.path());
-//             let txt = match std::fs::read_to_string(entry.path()) {
-//                 Ok(s) => s,
-//                 Err(e) => {
-//                     println!("[DEBUG] Read error: {:?}", e);
-//                     continue;
-//                 }
-//             };
-
-//             let stem = entry
-//                 .path()
-//                 .file_stem()
-//                 .and_then(|s| s.to_str())
-//                 .unwrap_or("");
-
-//             // Try parsing as template
-//             if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
-//                 if !tpl.interface.is_empty() {
-//                     println!("[DEBUG] Registered template: {}", stem);
-//                     let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
-//                     templates.insert(
-//                         stem.to_string(),
-//                         (
-//                             WidgetDef {
-//                                 widget_type: tpl.widget_type,
-//                                 id: tpl.id,
-//                                 properties: tpl.properties,
-//                                 children: tpl.children,
-//                             },
-//                             params,
-//                         ),
-//                     );
-//                     continue; // skip root parsing
-//                 }
-//             }
-//             // Else try as root definition
-//             if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
-//                 println!(
-//                     "[DEBUG] Registered root: {} (id={:?})",
-//                     def.widget_type, def.id
-//                 );
-//                 roots.push(def);
-//             } else {
-//                 println!("[DEBUG] Failed to parse {} as template or root", stem);
-//             }
-//         }
-//     }
-
-//     println!("[DEBUG] Total templates: {}", templates.len());
-//     println!("[DEBUG] Total roots: {}", roots.len());
-
-//     for def in roots.iter_mut() {
-//         expand_templates(def, &templates);
-//     }
-// }
 
 fn load_and_prepare(
     dir: &PathBuf,
@@ -332,100 +208,8 @@ fn load_and_prepare(
                 continue;
             }
         }
-
-
-
-
-        // match parser::parse_template(&text, &stem) {
-        //     Ok(tpl) => {
-        //         println!("[DEBUG] Registered template: {}", tpl.name);
-        //         // templates.insert(tpl.name.clone(), tpl);
-        //     }
-
-        //     Err(err) => {
-        //         eprintln!(
-        //             "[ERROR] Failed to parse {}.wui (skipping): {}",
-        //             stem,
-        //             err // this calls Display on the pest::Error
-        //         );
-        //         continue;
-        //     } //     Err(err) => {
-              //         eprintln!(
-              //             "[ERROR] Failed to parse {}.wui (skipping):\n  {} at line {}, col {}",
-              //             stem,
-              //             err.variant.message(), // use .to_string() if no message() method
-              //             err.line_col.unwrap_or((0, 0)).0,
-              //             err.line_col.unwrap_or((0, 0)).1,
-              //         );
-              //         // Skip this file instead of panic!
-              //         continue;
-              //     }
-        // }
     }
 
-    // for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
-    //     if entry.path().extension().and_then(|s| s.to_str()) == Some("wui") {
-    //         println!("[DEBUG] Found wui file: {:?}", entry.path());
-    //         let txt = match std::fs::read_to_string(entry.path()) {
-    //             Ok(s) => s,
-    //             Err(e) => {
-    //                 println!("[DEBUG] Read error: {:?}", e);
-    //                 continue;
-    //             }
-    //         };
-
-    //         let stem = entry
-    //             .path()
-    //             .file_stem()
-    //             .and_then(|s| s.to_str())
-    //             .unwrap_or("");
-
-    //         if stem == "main" {
-    //             let tpl = parse_template(&txt, &stem).expect("failed to parse main.wui");
-    //             println!("Parsed main template: {:#?}", tpl);
-    //             // templates.insert(tpl.name.clone(), tpl);
-    //         }
-
-    // // Try parsing as template
-    // if let Ok(tpl) = toml::from_str::<TemplateDef>(&txt) {
-    //     if !tpl.interface.is_empty() {
-    //         println!("[DEBUG] Registered template: {}", stem);
-    //         let params = tpl.interface.iter().map(|p| p.name.clone()).collect();
-    //         templates.insert(
-    //             stem.to_string(),
-    //             (
-    //                 WidgetDef {
-    //                     widget_type: tpl.widget_type,
-    //                     id: tpl.id,
-    //                     properties: tpl.properties,
-    //                     children: tpl.children,
-    //                 },
-    //                 params,
-    //             ),
-    //         );
-    //         continue; // skip root parsing
-    //     }
-    // }
-    // Else try as root definition
-
-    // if let Ok(def) = toml::from_str::<WidgetDef>(&txt) {
-    //     println!(
-    //         "[DEBUG] Registered root: {} (id={:?})",
-    //         def.widget_type, def.id
-    //     );
-    //     roots.push(def);
-    // } else {
-    //     println!("[DEBUG] Failed to parse {} as template or root", stem);
-    // }
-    //     }
-    // }
-
-    // println!("[DEBUG] Total templates: {}", templates.len());
-    // println!("[DEBUG] Total roots: {}", roots.len());
-
-    // for def in roots.iter_mut() {
-    //     expand_templates(def, &templates);
-    // }
 }
 
 fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef, Vec<String>)>) {
@@ -453,46 +237,6 @@ fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef,
     }
 }
 
-// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
-//     let label = def.id.as_deref().unwrap_or(&def.widget_type);
-//     egui::CollapsingHeader::new(label)
-//         .default_open(true)
-//         .show(ui, |ui| {
-//             for child in &def.children {
-//                 show_tree(ui, child);
-//             }
-//         });
-// }
-
-// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
-//     // Compose a unique id_source from the address of `def` or its label + a counter:
-//     let id_src = def.id.as_deref().unwrap_or(&def.widget_type);
-//     let unique = format!("{}_{:p}", id_src, def);
-
-//     egui::CollapsingHeader::new(&def.id.clone().unwrap_or(id_src.to_string()))
-//         .id_source(unique)
-//         .default_open(true)
-//         .show(ui, |ui| {
-//             for child in &def.children {
-//                 show_tree(ui, child);
-//             }
-//         });
-// }
-
-// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
-//     let label = def.id.as_deref().unwrap_or(&def.widget_type);
-
-//     // tack on a unique suffix after `##` so egui uses it as the internal ID:
-//     let unique_label = format!("{label}##{:p}", def);
-
-//     egui::CollapsingHeader::new(unique_label)
-//         .default_open(true)
-//         .show(ui, |ui| {
-//             for child in &def.children {
-//                 show_tree(ui, child);
-//             }
-//         });
-// }
 
 fn show_tree(ui: &mut egui::Ui, def: &WidgetDef, id_path: &mut Vec<usize>) {
     // 1) Compute the display label

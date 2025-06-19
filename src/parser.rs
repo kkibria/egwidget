@@ -1,12 +1,12 @@
-// src/parser.rs
 use pest::Position;
 use pest::error::InputLocation;
 
 use pest::Parser;
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::Pair;
 use pest_derive::Parser;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Template {
     pub name: String,
@@ -14,6 +14,7 @@ pub struct Template {
     pub body: Vec<WidgetInstance>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct WidgetInstance {
     pub widget: String,
