@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
 use eframe::{App, egui};
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, Event, EventKind, RecursiveMode, Watcher};
 use rfd::FileDialog;
 use serde::Deserialize;
 use std::collections::HashMap;
 use walkdir::WalkDir;
+
+use notify::{Error, PollWatcher};
+use std::time::Duration;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
@@ -44,7 +47,7 @@ struct WidgetDef {
 
 struct TomlUiApp {
     watch_path: Option<PathBuf>,
-    watcher: Option<RecommendedWatcher>,
+    watcher: Option<PollWatcher>,
     watch_rx: Option<Receiver<Event>>,
     reload_rx: Option<Receiver<Event>>,
     templates: HashMap<String, (WidgetDef, Vec<String>)>,
@@ -64,26 +67,54 @@ impl TomlUiApp {
     }
 
     /// Call when the user picks a folder.
-    fn set_watch_path(&mut self, path: PathBuf) {
+    ///
+    ///
+    ///
+    ///
+
+    fn set_watch_path<F>(&mut self, path: PathBuf, mut on_event: F)
+    where
+        F: FnMut() + Send + 'static,
+    {
+        // fn set_watch_path(&mut self, path: PathBuf) {
         // remember the path
         self.watch_path = Some(path.clone());
 
         // channel for file events
-        let (tx, rx) = std::sync::mpsc::channel();
 
         // create the watcher once
-        let mut w = RecommendedWatcher::new(
-            move |res| {
-                if let Ok(evt) = res {
+        // let mut w = RecommendedWatcher::new(
+        //     move |res| {
+        //         if let Ok(evt) = res {
+        //             let _ = tx.send(evt);
+        //         }
+        //     },
+        //     notify::Config::default(),
+        // )
+        // .expect("failed to init watcher");
+
+        // w.watch(&path, RecursiveMode::Recursive)
+        //     .expect("failed to watch folder");
+
+        let (tx, rx) = channel();
+
+        // Poll every 500ms (tweak as you like)
+        let mut w: PollWatcher = PollWatcher::new(
+            move |res: Result<Event, Error>| match res {
+                Ok(evt) => {
+                    println!("[DEBUG] watcher callback event: {:?}", evt.kind);
                     let _ = tx.send(evt);
+                    on_event();
+                }
+                Err(err) => {
+                    eprintln!("[DEBUG] watcher error: {:?}", err);
                 }
             },
-            notify::Config::default(),
+            Config::default().with_poll_interval(Duration::from_millis(500)),
         )
-        .expect("failed to init watcher");
-
+        .expect("failed to init PollWatcher");
         w.watch(&path, RecursiveMode::Recursive)
-            .expect("failed to watch folder");
+            .expect("failed to watch toml folder");
 
         self.watcher = Some(w);
         self.watch_rx = Some(rx);
@@ -124,11 +155,12 @@ impl App for TomlUiApp {
                     ui.heading("No TOML folder selected");
                     if ui.button("Select folder…").clicked() {
                         // Using `rfd` crate for a native folder dialog:
-                        if let Some(folder) = rfd::FileDialog::new()
+                        if let Some(folder) = FileDialog::new()
                             .set_title("Choose your TOML folder")
                             .pick_folder()
                         {
-                            self.set_watch_path(folder);
+                            let repaint = ctx.clone();
+                            self.set_watch_path(folder, move || repaint.request_repaint());
                         }
                     }
                 });
@@ -148,18 +180,49 @@ impl App for TomlUiApp {
             }
         }
 
-        // Tree view
-        egui::SidePanel::left("tree_panel").show(ctx, |ui| {
-            ui.heading("Widget Trees");
-            for (i, def) in self.roots.iter().enumerate() {
-                let label = def.id.clone().unwrap_or_else(|| format!("Root {}", i));
-                egui::CollapsingHeader::new(label)
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        show_tree(ui, def);
-                    });
+        // 1) Drain all pending events:
+        let mut changed = false;
+        if let Some(rx) = &self.watch_rx {
+            while let Ok(evt) = rx.try_recv() {
+                println!("[DEBUG] update loop got event: {:?}", evt.kind);
+                changed = true;
+            }
+        }
+
+        // 2) If anything arrived, reload:
+        if changed {
+            if let Some(path) = &self.watch_path {
+                println!("[DEBUG] Detected file change, reloading TOMLs…");
+                load_and_prepare(path, &mut self.templates, &mut self.roots);
+                println!(
+                    "[DEBUG] Reload complete: {} templates, {} roots",
+                    self.templates.len(),
+                    self.roots.len()
+                );
+            }
+        }
+
+        egui::SidePanel::left("tree").show(ctx, |ui| {
+            let mut id_path = Vec::new();
+            for (i, root) in self.roots.iter().enumerate() {
+                id_path.clear();
+                id_path.push(i);
+                show_tree(ui, root, &mut id_path);
             }
         });
+
+        // Tree view
+        // egui::SidePanel::left("tree_panel").show(ctx, |ui| {
+        //     ui.heading("Widget Trees");
+        //     for (i, def) in self.roots.iter().enumerate() {
+        //         let label = def.id.clone().unwrap_or_else(|| format!("Root {}", i));
+        //         egui::CollapsingHeader::new(label)
+        //             .default_open(true)
+        //             .show(ui, |ui| {
+        //                 show_tree(ui, def);
+        //             });
+        //     }
+        // });
 
         // Preview
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -263,15 +326,65 @@ fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef,
     }
 }
 
-fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
+// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
+//     let label = def.id.as_deref().unwrap_or(&def.widget_type);
+//     egui::CollapsingHeader::new(label)
+//         .default_open(true)
+//         .show(ui, |ui| {
+//             for child in &def.children {
+//                 show_tree(ui, child);
+//             }
+//         });
+// }
+
+// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
+//     // Compose a unique id_source from the address of `def` or its label + a counter:
+//     let id_src = def.id.as_deref().unwrap_or(&def.widget_type);
+//     let unique = format!("{}_{:p}", id_src, def);
+
+//     egui::CollapsingHeader::new(&def.id.clone().unwrap_or(id_src.to_string()))
+//         .id_source(unique)
+//         .default_open(true)
+//         .show(ui, |ui| {
+//             for child in &def.children {
+//                 show_tree(ui, child);
+//             }
+//         });
+// }
+
+// fn show_tree(ui: &mut egui::Ui, def: &WidgetDef) {
+//     let label = def.id.as_deref().unwrap_or(&def.widget_type);
+
+//     // tack on a unique suffix after `##` so egui uses it as the internal ID:
+//     let unique_label = format!("{label}##{:p}", def);
+
+//     egui::CollapsingHeader::new(unique_label)
+//         .default_open(true)
+//         .show(ui, |ui| {
+//             for child in &def.children {
+//                 show_tree(ui, child);
+//             }
+//         });
+// }
+
+fn show_tree(ui: &mut egui::Ui, def: &WidgetDef, id_path: &mut Vec<usize>) {
+    // 1) Compute the display label
     let label = def.id.as_deref().unwrap_or(&def.widget_type);
-    egui::CollapsingHeader::new(label)
-        .default_open(true)
-        .show(ui, |ui| {
-            for child in &def.children {
-                show_tree(ui, child);
-            }
-        });
+
+    // 2) Push a unique ID for this node based on its position in the tree
+    //    e.g. [0,2,1] for root‐child‐grandchild path
+    ui.push_id(id_path.clone(), |ui| {
+        egui::CollapsingHeader::new(label)
+            .default_open(true)
+            .show(ui, |ui| {
+                // 3) Recurse into children, pushing index as part of the path
+                for (i, child) in def.children.iter().enumerate() {
+                    id_path.push(i);
+                    show_tree(ui, child, id_path);
+                    id_path.pop();
+                }
+            });
+    });
 }
 
 fn render_preview(ui: &mut egui::Ui, def: &WidgetDef) {
