@@ -5,8 +5,8 @@ WHITESPACE        = _{ " " | "\t" | "\r" | "\n" }
 COMMENT           = _{ "//" ~ (!"\n" ~ ANY)* }
 
 // Basic tokens
-ident             = @{ ASCII_ALPHA_LOWER ~ ( "_"? ~ ( ASCII_ALPHA_LOWER | ASCII_DIGIT ) )* }
-widget_ident      = @{ ASCII_ALPHA_UPPER ~ ( "_"? ~ ASCII_ALPHANUMERIC )* }
+ident             = @{ ASCII_ALPHA_LOWER ~ ( "_"* ~ ( ASCII_ALPHA_LOWER | ASCII_DIGIT ) )* }
+widget_ident      = @{ ASCII_ALPHA_UPPER ~ ( "_"* ~ ASCII_ALPHANUMERIC )* }
 string            = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 number            = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 boolean           = { "true" | "false" }
