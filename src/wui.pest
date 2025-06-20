@@ -5,7 +5,8 @@ WHITESPACE        = _{ " " | "\t" | "\r" | "\n" }
 COMMENT           = _{ "//" ~ (!"\n" ~ ANY)* }
 
 // Basic tokens
-ident             = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")+  }
+ident             = @{ ASCII_ALPHA_LOWER ~ (ASCII_ALPHA_LOWER | "_"| ASCII_DIGIT)* }
+widget_ident      = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
 string            = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 number            = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 boolean           = { "true" | "false" }
@@ -49,7 +50,7 @@ for_decl          = { "For" ~ "(" ~ ident ~ "in" ~ ident ~ ")" ~ "{" ~ statement
 // --- Widget invocation ---
 
 // A widget call with optional args and optional nested body
-widget_decl       = { ident 
+widget_decl       = { widget_ident 
                     ~ ("(" ~ arg_list? ~ ")") 
                     ~ ("{" ~ statement* ~ "}")? 
                     ~ ";"? }
