@@ -1,4 +1,6 @@
+mod builder;
 mod parser;
+
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
 
@@ -9,8 +11,10 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use notify::{Error, PollWatcher};
-use parser::{parse_template, print_parse_error};
 use std::time::Duration;
+
+use builder::{WidgetDef, build_widget_tree};
+use parser::{Template, parse_template, print_parse_error};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
@@ -35,23 +39,23 @@ struct TemplateDef {
     children: Vec<WidgetDef>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
-struct WidgetDef {
-    widget_type: String,
-    #[serde(default)]
-    id: Option<String>,
-    #[serde(default)]
-    properties: toml::value::Table,
-    #[serde(default)]
-    children: Vec<WidgetDef>,
-}
+// #[derive(Debug, Deserialize, Clone, Default)]
+// struct WidgetDef {
+//     widget_type: String,
+//     #[serde(default)]
+//     id: Option<String>,
+//     #[serde(default)]
+//     properties: toml::value::Table,
+//     #[serde(default)]
+//     children: Vec<WidgetDef>,
+// }
 
 struct TomlUiApp {
     watch_path: Option<PathBuf>,
     watcher: Option<PollWatcher>,
     watch_rx: Option<Receiver<Event>>,
     reload_rx: Option<Receiver<Event>>,
-    templates: HashMap<String, (WidgetDef, Vec<String>)>,
+    templates: HashMap<String, Template>,
     roots: Vec<WidgetDef>,
 }
 
@@ -106,7 +110,7 @@ impl App for TomlUiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.watch_path.is_none() {
             egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Widget Trees");
+                ui.heading("Widget Trees");
                 ui.vertical_centered(|ui| {
                     ui.heading("No TOML folder selected");
                     if ui.button("Select folder…").clicked() {
@@ -167,7 +171,6 @@ impl App for TomlUiApp {
             }
         });
 
-    
         // Preview
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Preview");
@@ -178,10 +181,9 @@ impl App for TomlUiApp {
     }
 }
 
-
 fn load_and_prepare(
     dir: &PathBuf,
-    templates: &mut HashMap<String, (WidgetDef, Vec<String>)>,
+    templates: &mut HashMap<String, Template>,
     roots: &mut Vec<WidgetDef>,
 ) {
     println!("[DEBUG] Scanning directory: {:?}", dir);
@@ -200,7 +202,7 @@ fn load_and_prepare(
         match parse_template(&text, &stem) {
             Ok(tpl) => {
                 println!("[DEBUG] Registered template: {}", tpl.name);
-                // templates.insert(tpl.name.clone(), tpl);
+                templates.insert(tpl.name.clone(), tpl);
             }
             Err(err) => {
                 print_parse_error(&text, err, &format!("{}.wui", stem));
@@ -208,35 +210,12 @@ fn load_and_prepare(
                 continue;
             }
         }
-    }
 
-}
-
-fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, (WidgetDef, Vec<String>)>) {
-    if let Some((base, allowed)) = templates.get(&def.widget_type) {
-        // shallow‐clone the base widget
-        let mut merged = base.clone();
-
-        // filter instance properties by allowed
-        let props = std::mem::take(&mut def.properties);
-        for (k, v) in props.into_iter().filter(|(k, _)| allowed.contains(k)) {
-            merged.properties.insert(k, v);
+        if let Some(root_def) = build_widget_tree(&templates, "main") {
+            *roots = vec![root_def];
         }
-
-        // merge children
-        let extra = std::mem::take(&mut def.children);
-        merged.children.extend(extra);
-
-        // replace
-        *def = merged;
-    }
-
-    // recurse
-    for child in &mut def.children {
-        expand_templates(child, templates);
     }
 }
-
 
 fn show_tree(ui: &mut egui::Ui, def: &WidgetDef, id_path: &mut Vec<usize>) {
     // 1) Compute the display label
@@ -262,17 +241,17 @@ fn render_preview(ui: &mut egui::Ui, def: &WidgetDef) {
     match def.widget_type.as_str() {
         "Button" => {
             let text = def
-                .properties
+                .args
                 .get("text")
-                .and_then(|v| v.as_str())
+                .and_then(|v| Some(v.as_str()))
                 .unwrap_or("Button");
             let _ = ui.button(text);
         }
         "Label" => {
             let text = def
-                .properties
+                .args
                 .get("text")
-                .and_then(|v| v.as_str())
+                .and_then(|v| Some(v.as_str()))
                 .unwrap_or("Label");
             ui.label(text);
         }
