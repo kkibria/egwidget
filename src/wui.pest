@@ -5,7 +5,7 @@ WHITESPACE        = _{ " " | "\t" | "\r" | "\n" }
 COMMENT           = _{ "//" ~ (!"\n" ~ ANY)* }
 
 // Basic tokens
-ident             = @{ ASCII_ALPHANUMERIC+ }
+ident             = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")+  }
 string            = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 number            = @{ "-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 boolean           = { "true" | "false" }
@@ -17,13 +17,11 @@ script_block      = @{ "{{" ~ (!"}}" ~ ANY)* ~ "}}" }
 literal           = _{ string | number | boolean }
 
 // A top‐level file is just a sequence of statements
-file              = { SOI ~ statement* ~ EOI }
+file              = { SOI ~ param_decl* ~ breakpoints_decl? ~ statement* ~ EOI }
 
 // Any of these can appear at top‐level or inside widget bodies
 statement         = _{
-    param_decl
-  | breakpoints_decl
-  | effect_decl
+    effect_decl
   | if_decl
   | for_decl
   | widget_decl
@@ -54,7 +52,7 @@ for_decl          = { "For" ~ "(" ~ ident ~ "in" ~ ident ~ ")" ~ "{" ~ statement
 widget_decl       = { ident 
                     ~ ("(" ~ arg_list? ~ ")") 
                     ~ ("{" ~ statement* ~ "}")? 
-                    ~ ";" }
+                    ~ ";"? }
 
 // Argument list inside parentheses
 arg_list          = { arg ~ ("," ~ arg)* }

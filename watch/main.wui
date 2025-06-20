@@ -1,5 +1,77 @@
 // main.wui
-param title;
-Frame() {
-  Label(text = {{ title }} );
+
+// === Reactive state parameters with defaults ===
+param counter   = 0;            // tracks button clicks
+param show_menu = true;         // toggle for optional section
+
+// === Named breakpoints for responsive layouts ===
+
+Breakpoints {
+  mobile  = 480;
+  tablet  = 768;
+  desktop = 1024;
 }
+
+// === The root widget ===
+Frame() {
+  // Header bar with current time from a Rust host function
+  Horizontal() {
+    Label(text = "🕒 Now: {{ now() }}")
+    Spacer();
+    Button(
+      text     = "Refresh Time",
+      on_click = {{ /* call host fn and re-render */ now(); }}
+    )
+  }
+  Separator();
+
+  // Live counter display
+  Label(text = "You clicked {{ counter }} times");
+
+  // Buttons to mutate reactive state and call a Rust logger
+  Horizontal() {
+    Button(
+      text     = "+1",
+      on_click = {{ counter += 1; log_counter(counter); }}
+    )
+    Button(
+      text     = "Reset",
+      on_click = {{ counter = 0; }}
+    )
+    Button(
+      text     = "Hide Menu",
+      on_click = {{ show_menu = false; }}
+    )
+  }
+  Separator();
+
+  // Responsive grid of cards (assume Card.wui exists)
+  Responsive(layout = "grid") {
+    // Show three example cards
+    Card(title="Alpha",   on_click={{ log_card("Alpha") }})  
+    Card(title="Bravo",   on_click={{ log_card("Bravo") }}) { };
+    Card(title="Charlie", on_click={{ log_card("Charlie") }}) { };
+  };
+
+  // Conditionally render a menu section
+  If(show_menu) {
+    Separator();
+    Vertical() {
+      Label(text="— Hidden Menu Section —");
+      Button(
+        text     = "Show Menu Again",
+        on_click = {{ show_menu = true; }}
+      )
+    }
+  }
+
+  // Footer with a host function call
+  Separator();
+  Horizontal() {
+    Button(
+      text     = "Print Summary",
+      on_click = {{ print_summary(counter); }}
+    )
+  }
+}
+
