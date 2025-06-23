@@ -14,7 +14,7 @@ use notify::{Error, PollWatcher};
 use std::time::Duration;
 
 use builder::{WidgetDef, build_widget_tree};
-use parser::{Widget, parse_template, print_parse_error};
+use parser::{Widget, parse_widget_file, print_parse_error};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
@@ -95,24 +95,28 @@ impl TomlUiApp {
 impl App for TomlUiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.watch_path.is_none() {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.heading("Widget Trees");
-                ui.vertical_centered(|ui| {
-                    ui.heading("No WUI folder selected");
-                    if ui.button("Select folder…").clicked() {
-                        // Using `rfd` crate for a native folder dialog:
-                        if let Some(folder) = FileDialog::new()
-                            .set_title("Choose your WUI folder")
-                            .pick_folder()
-                        {
-                            let repaint = ctx.clone();
-                            self.set_watch_path(folder, move || repaint.request_repaint());
-                        }
-                    }
-                });
-            });
-            return; // skip the rest until a folder is chosen
-        }
+            let repaint = ctx.clone();
+            self.set_watch_path(PathBuf::from(r"E:\musicdev\egwidget\watch"), move || repaint.request_repaint());
+            return;
+
+            // egui::CentralPanel::default().show(ctx, |ui| {
+            //     ui.heading("Widget Trees");
+            //     ui.vertical_centered(|ui| {
+            //         ui.heading("No WUI folder selected");
+            //         if ui.button("Select folder…").clicked() {
+            //             // Using `rfd` crate for a native folder dialog:
+            //             if let Some(folder) = FileDialog::new()
+            //                 .set_title("Choose your WUI folder")
+            //                 .pick_folder()
+            //             {
+            //                 let repaint = ctx.clone();
+            //                 self.set_watch_path(folder, move || repaint.request_repaint());
+            //             }
+            //         }
+            //     });
+            // });
+            // return; // skip the rest until a folder is chosen
+        } 
 
         // File events
         if let Some(rx) = &self.reload_rx {
@@ -185,7 +189,7 @@ fn load_and_prepare(
         let text = std::fs::read_to_string(&path).unwrap();
 
         // Try to parse as a template
-        match parse_template(&text, &stem) {
+        match parse_widget_file(&text, &stem) {
             Ok(tpl) => {
                 println!("[DEBUG] Registered template: {}", tpl.name);
                 widgets.insert(tpl.name.clone(), tpl);
@@ -196,6 +200,8 @@ fn load_and_prepare(
                 continue;
             }
         }
+
+        println!("widgets:\n {:#?}", widgets);
 
         if let Some(root_def) = build_widget_tree(&widgets, "main") {
             *roots = vec![root_def];

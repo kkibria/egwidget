@@ -3,6 +3,7 @@
 // Skip whitespace and line comments
 WHITESPACE        = _{ " " | "\t" | "\r" | "\n" }
 COMMENT           = _{ "//" ~ (!"\n" ~ ANY)* }
+INLINE_COMMENT    = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/"}
 
 // Basic tokens
 ident             = @{ ASCII_ALPHA_LOWER ~ ( "_"* ~ ( ASCII_ALPHA_LOWER | ASCII_DIGIT ) )* }

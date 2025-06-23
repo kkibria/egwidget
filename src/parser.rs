@@ -1,5 +1,5 @@
 use pest::Position;
-use pest::error::InputLocation;
+use pest::error::{Error, InputLocation};
 
 use pest::Parser;
 use pest::iterators::Pair;
@@ -12,6 +12,12 @@ pub struct Widget {
     pub name: String,
     pub params: Vec<String>,
     pub body: Vec<WidgetInstance>,
+}
+
+#[derive(Debug)]
+pub struct Param {
+    pub ident: String,
+    pub literal: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -27,7 +33,7 @@ pub struct WidgetInstance {
 pub struct WuiParser;
 
 // Entry point: parse one file into a Template
-pub fn parse_template(source: &str, name: &str) -> Result<Widget, pest::error::Error<Rule>> {
+pub fn parse_widget_file(source: &str, name: &str) -> Result<Widget, pest::error::Error<Rule>> {
     let mut pairs = WuiParser::parse(Rule::file, source)?;
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -36,11 +42,25 @@ pub fn parse_template(source: &str, name: &str) -> Result<Widget, pest::error::E
         match pair.as_rule() {
             Rule::param_decl => {
                 let mut inner = pair.into_inner();
+                // let len = inner.len();
+
+                // print!("inner {:#?} len {:#?}\n", inner, len); 
                 let ident = inner.next().unwrap().as_str().to_string();
+                // let ident = inner[0].unwrap().as_str().to_string();
+                // if len == 1 {
+                // let value = inner.next().unwrap().as_str().to_string();
+
+                // } 
+
+                // print!("inner {:#?} len {:#?}\n", inner, len); 
+
                 // ignore default for now
                 params.push(ident);
             }
             Rule::widget_decl => {
+                let mut inner = pair.clone().into_inner();
+                let len = inner.len();
+                print!("inner {:#?} len {:#?}\n", inner, len); 
                 body.push(build_widget(pair));
             }
             Rule::breakpoints_decl
@@ -62,7 +82,10 @@ pub fn parse_template(source: &str, name: &str) -> Result<Widget, pest::error::E
 }
 
 fn build_widget(pair: Pair<Rule>) -> WidgetInstance {
-    assert_eq!(pair.as_rule(), Rule::widget_decl);
+    let x = pair.as_rule();
+    println!("\nRule: {:#?}", x); 
+    assert_eq!(x, Rule::widget_decl);
+    // assert_eq!(pair.as_rule(), Rule::widget_decl);
     let mut inner = pair.into_inner();
     // 1) widget name
     let widget = inner.next().unwrap().as_str().to_string();
@@ -108,7 +131,7 @@ fn build_widget(pair: Pair<Rule>) -> WidgetInstance {
 }
 
 /// Print a user-friendly parse error for a `.wui` file.
-pub fn print_parse_error(source: &str, err: pest::error::Error<Rule>, filename: &str) {
+pub fn print_parse_error(source: &str, err: Error<Rule>, filename: &str) {
     // Compute (line, col) from the error’s location
     let (line, col) = match err.location {
         InputLocation::Pos(pos) => {

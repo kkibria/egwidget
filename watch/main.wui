@@ -3,6 +3,7 @@
 // === Reactive state parameters with defaults ===
 param counter   = 0;            // tracks button clicks
 param show_menu = true;         // toggle for optional section
+param test;         // no default
 
 // === Named breakpoints for responsive layouts ===
 
