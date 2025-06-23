@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.98"
 eframe = "0.31.1"
 notify = "8.0.0"
 pest = "2.8.1"

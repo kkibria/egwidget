@@ -30,7 +30,7 @@ Frame() {
 
   // Buttons to mutate reactive state and call a Rust logger
   Horizontal() {
-    Button(
+    button(
       text     = "+1",
       on_click = {{ counter += 1; log_counter(counter); }}
     )

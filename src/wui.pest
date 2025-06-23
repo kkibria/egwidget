@@ -26,6 +26,7 @@ statement         = _{
   | if_decl
   | for_decl
   | widget_decl
+  | builtin_decl
 }
 
 // --- Declarations ---
@@ -53,6 +54,10 @@ for_decl          = { "For" ~ "(" ~ ident ~ "in" ~ ident ~ ")" ~ "{" ~ statement
 widget_decl       = { widget_ident 
                     ~ ("(" ~ arg_list? ~ ")") 
                     ~ ("{" ~ statement* ~ "}")? 
+                    ~ ";"? }
+
+builtin_decl      = { ident 
+                    ~ ("(" ~ arg_list? ~ ")") 
                     ~ ";"? }
 
 // Argument list inside parentheses
