@@ -14,7 +14,7 @@ use notify::{Error, PollWatcher};
 use std::time::Duration;
 
 use builder::{WidgetDef, build_widget_tree};
-use parser::{Template, parse_template, print_parse_error};
+use parser::{Widget, parse_template, print_parse_error};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
@@ -22,7 +22,6 @@ struct InterfaceParam {
     name: String,
     #[serde(rename = "type")]
     ty: String,
-    default: Option<toml::Value>,
 }
 
 #[allow(dead_code)]
@@ -34,35 +33,22 @@ struct TemplateDef {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
-    properties: toml::value::Table,
-    #[serde(default)]
     children: Vec<WidgetDef>,
 }
-
-// #[derive(Debug, Deserialize, Clone, Default)]
-// struct WidgetDef {
-//     widget_type: String,
-//     #[serde(default)]
-//     id: Option<String>,
-//     #[serde(default)]
-//     properties: toml::value::Table,
-//     #[serde(default)]
-//     children: Vec<WidgetDef>,
-// }
 
 struct TomlUiApp {
     watch_path: Option<PathBuf>,
     watcher: Option<PollWatcher>,
     watch_rx: Option<Receiver<Event>>,
     reload_rx: Option<Receiver<Event>>,
-    templates: HashMap<String, Template>,
+    widgets: HashMap<String, Widget>,
     roots: Vec<WidgetDef>,
 }
 
 impl TomlUiApp {
     pub fn new() -> Self {
         Self {
-            templates: HashMap::new(),
+            widgets: HashMap::new(),
             roots: Vec::new(),
             watch_path: None,
             watcher: None,
@@ -96,13 +82,13 @@ impl TomlUiApp {
         )
         .expect("failed to init PollWatcher");
         w.watch(&path, RecursiveMode::Recursive)
-            .expect("failed to watch toml folder");
+            .expect("failed to watch wui folder");
 
         self.watcher = Some(w);
         self.watch_rx = Some(rx);
 
         // initial load
-        load_and_prepare(&path, &mut self.templates, &mut self.roots);
+        load_and_prepare(&path, &mut self.widgets, &mut self.roots);
     }
 }
 
@@ -112,11 +98,11 @@ impl App for TomlUiApp {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.heading("Widget Trees");
                 ui.vertical_centered(|ui| {
-                    ui.heading("No TOML folder selected");
+                    ui.heading("No WUI folder selected");
                     if ui.button("Select folder…").clicked() {
                         // Using `rfd` crate for a native folder dialog:
                         if let Some(folder) = FileDialog::new()
-                            .set_title("Choose your TOML folder")
+                            .set_title("Choose your WUI folder")
                             .pick_folder()
                         {
                             let repaint = ctx.clone();
@@ -133,7 +119,7 @@ impl App for TomlUiApp {
             if let Ok(event) = rx.try_recv() {
                 if let Some(dir) = &self.watch_path {
                     if matches!(event.kind, EventKind::Modify(_)) {
-                        load_and_prepare(dir, &mut self.templates, &mut self.roots);
+                        load_and_prepare(dir, &mut self.widgets, &mut self.roots);
                         ctx.request_repaint();
                     }
                 }
@@ -152,11 +138,11 @@ impl App for TomlUiApp {
         // 2) If anything arrived, reload:
         if changed {
             if let Some(path) = &self.watch_path {
-                println!("[DEBUG] Detected file change, reloading TOMLs…");
-                load_and_prepare(path, &mut self.templates, &mut self.roots);
+                println!("[DEBUG] Detected file change, reloading WUIs…");
+                load_and_prepare(path, &mut self.widgets, &mut self.roots);
                 println!(
                     "[DEBUG] Reload complete: {} templates, {} roots",
-                    self.templates.len(),
+                    self.widgets.len(),
                     self.roots.len()
                 );
             }
@@ -183,11 +169,11 @@ impl App for TomlUiApp {
 
 fn load_and_prepare(
     dir: &PathBuf,
-    templates: &mut HashMap<String, Template>,
+    widgets: &mut HashMap<String, Widget>,
     roots: &mut Vec<WidgetDef>,
 ) {
     println!("[DEBUG] Scanning directory: {:?}", dir);
-    templates.clear();
+    widgets.clear();
     roots.clear();
 
     for entry in std::fs::read_dir(&dir).unwrap() {
@@ -202,7 +188,7 @@ fn load_and_prepare(
         match parse_template(&text, &stem) {
             Ok(tpl) => {
                 println!("[DEBUG] Registered template: {}", tpl.name);
-                templates.insert(tpl.name.clone(), tpl);
+                widgets.insert(tpl.name.clone(), tpl);
             }
             Err(err) => {
                 print_parse_error(&text, err, &format!("{}.wui", stem));
@@ -211,7 +197,7 @@ fn load_and_prepare(
             }
         }
 
-        if let Some(root_def) = build_widget_tree(&templates, "main") {
+        if let Some(root_def) = build_widget_tree(&widgets, "main") {
             *roots = vec![root_def];
         }
     }

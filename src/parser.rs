@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Template {
+pub struct Widget {
     pub name: String,
     pub params: Vec<String>,
     pub body: Vec<WidgetInstance>,
@@ -27,7 +27,7 @@ pub struct WidgetInstance {
 pub struct WuiParser;
 
 // Entry point: parse one file into a Template
-pub fn parse_template(source: &str, name: &str) -> Result<Template, pest::error::Error<Rule>> {
+pub fn parse_template(source: &str, name: &str) -> Result<Widget, pest::error::Error<Rule>> {
     let mut pairs = WuiParser::parse(Rule::file, source)?;
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -54,7 +54,7 @@ pub fn parse_template(source: &str, name: &str) -> Result<Template, pest::error:
         }
     }
 
-    Ok(Template {
+    Ok(Widget {
         name: name.to_string(),
         params,
         body,

@@ -1,6 +1,6 @@
 // src/builder.rs
 use std::collections::HashMap;
-use crate::parser::{Template, WidgetInstance};
+use crate::parser::{Widget, WidgetInstance};
 use serde::Deserialize;
 
 /// A fully‐expanded widget ready for rendering.
@@ -23,22 +23,22 @@ pub struct WidgetDef {
 /// Given a map of templates by name, and the root template name,
 /// build a single expanded WidgetDef tree.
 pub fn build_widget_tree(
-    templates: &HashMap<String, Template>,
+    widgets: &HashMap<String, Widget>,
     root_name: &str,
 ) -> Option<WidgetDef> {
-    templates.get(root_name).map(|tpl| {
+    widgets.get(root_name).map(|tpl| {
         // Start by instantiating the template with default params:
-        let mut root = instantiate_template(tpl);
+        let mut root = instantiate_widget(tpl);
 
         // Then recursively expand any nested template calls:
-        expand_templates(&mut root, templates);
+        expand_instances(&mut root, widgets);
         root
     })
 }
 
 /// Create a WidgetDef from a Template, filling all params with their default values.
 /// (You can adapt this to override defaults from outside.)
-fn instantiate_template(tpl: &Template) -> WidgetDef {
+fn instantiate_widget(tpl: &Widget) -> WidgetDef {
     // Build the initial children from the template body:
     let children = tpl
         .body
@@ -72,10 +72,10 @@ fn build_from_instance(inst: &WidgetInstance) -> WidgetDef {
 
 /// Recursively walk the WidgetDef tree; whenever you see a widget_type
 /// matching a template name, inline that template, merging args+children.
-fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, Template>) {
+fn expand_instances(def: &mut WidgetDef, templates: &HashMap<String, Widget>) {
     if let Some(tpl) = templates.get(&def.widget_type) {
         // 1) Build a fresh base from the template
-        let mut base = instantiate_template(tpl);
+        let mut base = instantiate_widget(tpl);
 
         // 2) Merge def.args into base.args (overrides)
         base.args.extend(def.args.clone());
@@ -94,6 +94,6 @@ fn expand_templates(def: &mut WidgetDef, templates: &HashMap<String, Template>) 
 
     // Recurse into children
     for child in &mut def.children {
-        expand_templates(child, templates);
+        expand_instances(child, templates);
     }
 }
