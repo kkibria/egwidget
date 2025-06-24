@@ -96,7 +96,7 @@ impl App for TomlUiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.watch_path.is_none() {
             let repaint = ctx.clone();
-            self.set_watch_path(PathBuf::from(r"E:\musicdev\egwidget\watch"), move || repaint.request_repaint());
+            self.set_watch_path(PathBuf::from(r"./watch"), move || repaint.request_repaint());
             return;
 
             // egui::CentralPanel::default().show(ctx, |ui| {
